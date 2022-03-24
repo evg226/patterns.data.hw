@@ -68,8 +68,21 @@ class Paste extends Command {
 class Editor {
     private array $commands;
     private int $activeStep=0;
+    private TextDocument $textDocument;
 
-    public function submit(Command $command,int $startPosition=0, int $length=0){
+    public function __construct(string $text)
+    {
+        $this->textDocument=new TextDocument($text);
+    }
+
+    function doOperation(string $operation,int $startPosition=0, int $length=0){
+        $receiverState=new ReceiverState($this->textDocument);
+        $command=new $operation($receiverState);
+        $this->submit($command,$startPosition,$length);
+        $this->textDocument = clone $command->state->textDocument;
+    }
+
+    private function submit(Command $command,int $startPosition=0, int $length=0){
         $command->execute($startPosition,$length);
         $this->commands[]=$command;
     }
@@ -78,12 +91,12 @@ class Editor {
     {
          print_r($this->commands);
     }
-    public function getTextDocument(int $step=-1):TextDocument{
+    public function goStep(int $step=-1){
         echo "Откат на $step относительно пункта истории ". (count($this->commands)+$this->activeStep)."\n";
         $this->activeStep+=$step;
         $result = $this->commands[count($this->commands)-1+$this->activeStep]->state->textDocument;
         print_r($result);
-        return $result;
+        $this->textDocument= $result;
     }
 }
 
@@ -102,33 +115,22 @@ class TextDocument{
 
 /**
  * Client (Usage)
- * Примечание - Клиентский объект TextDocument реализован на Client.
- *              Было бы красивее, если бы textDocument инкапсулирован в Editor.
- *              ОДнако UML -диаграмма патерна требует, чтобы Client был отделен от Invoker и взаимодействовал через Command
+ * Примечание - Вариант с инкапюляцией TextDocument  в Editor (Invoker).
+ *               Красивее код, видел такие варианты в WikiPedia
  */
 
-$editor=new Editor(); //Экземпляр Invoker'a
-
-//Функция для создания сборки
-function doOperation(TextDocument $textDocument, string $operation,int $startPosition=0, int $length=0):TextDocument{
-    global $editor;
-    $receiverState=new ReceiverState($textDocument);
-    $command=new $operation($receiverState);
-    $editor->submit($command,$startPosition,$length);
-    return clone $command->state->textDocument;
-}
-    //Загрузка текста (можно написать код и из файла)
-$textDocument=new TextDocument('Начальный текст файла');
-$textDocument=doOperation($textDocument,'Load');
+$editor = new Editor('Начальный текст файла'); //Экземпляр Invoker'a
+    //Загрузка текста
+$editor->doOperation('Load');
     //проверка операций
-$textDocument=doOperation($textDocument,'Cut',1,1);
-$textDocument=doOperation($textDocument,'Paste',0);
+$editor->doOperation('Cut',1,1);
+$editor->doOperation('Paste',0);
     //гуляем по истории
-$textDocument=$editor->getTextDocument(-1);
-$textDocument=$editor->getTextDocument(-1);
-$textDocument=$editor->getTextDocument(1);
+$editor->goStep(-1);
+$editor->goStep(-1);
+$editor->goStep(1);
     //Фиксируем выбранный пункт истории
-$textDocument=doOperation($textDocument,'Load');
+$editor->doOperation('Load');
 
 
 
